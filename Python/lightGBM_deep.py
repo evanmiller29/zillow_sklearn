@@ -79,24 +79,6 @@ resLog['funcsUsed'] = ', '.join(funcsUsed)
 resLog['grid_search'] = True
 
 #==============================================================================
-# Model hyperparameters
-#==============================================================================
-
-params = {}
-params['learning_rate'] = 0.0001
-params['boosting_type'] = 'gbdt'
-params['objective'] = 'regression'
-params['metric'] = 'mae'
-params['sub_feature'] = 0.50
-params['num_leaves'] = 60
-params['min_data'] = 500
-params['min_hessian'] = 1
-params['bagging_fraction'] = 0.55
-params['max_depth'] = 10
-
-resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
-
-#==============================================================================
 # Feature engineering
 #==============================================================================
 
@@ -171,7 +153,7 @@ pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
                              ('pca5', PCA(n_components= 5)),
                              ('pca10', PCA(n_components= 5))
                              ])),
-                     ('feat_select', SelectKBest(),
+                     ('feat_select', SelectKBest()),
                      ('lgbm', LGBMRegressor(metric = 'mae'))
                      
 ])
@@ -248,24 +230,3 @@ print('Saving predictions to file..')
 
 os.chdir(subPath)
 sample.to_csv('sub{}_{}.csv'.format(datetime.now().strftime('%Y%m%d_%H%M%S'), resLog['cvAcc']), index=False, float_format='%.4f')
-
-#==============================================================================
-# Logging outputs
-#==============================================================================
-
-print('Outputting logs..')
-
-os.chdir(basePath)
-
-logDF = (pd.DataFrame(list(resLog.items()))
-            .rename(columns = {0: 'desc', 1: 'values'})
-            .pivot(columns = 'desc')
-            .fillna(method = 'ffill')
-            .fillna(method = 'bfill'))
-            
-cols = [val[1] for val in logDF.columns.values]
-logDF.columns = cols
-           
-logs = pd.read_csv('modelling_log.csv')
-logDF = logs.append(logDF.loc[0, :])
-logDF.to_csv('modelling_log.csv', index_label = False, index = False)
