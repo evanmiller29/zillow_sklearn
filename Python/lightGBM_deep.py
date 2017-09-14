@@ -12,16 +12,17 @@ Created on Wed Aug 09 21:38:45 2017
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from lightgbm import LGBMRegressor
 from datetime import datetime
 import datetime as dt
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.preprocessing import Imputer
+from sklearn.preprocessing import Imputer, PolynomialFeatures
+from sklearn.decomposition import PCA
 import os
 import time
-
 
 project = 'Zillow'
 basePath = 'C:/' + project
@@ -186,20 +187,33 @@ d_valid = lgb.Dataset(x_valid, label=y_valid)
 # Setting up model run
 #==============================================================================
 
-select = SelectKBest(k=70)
-clf = RandomForestRegressor()
-imp = Imputer(missing_values='NaN', axis=0)
+pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
+                     ('feats', FeatureUnion([
+                             ('feat2', PolynomialFeatures(2)),
+                             ('feat3', PolynomialFeatures(3)),
+                             ('pca5', PCA(n_components= 5)),
+                             ('pca10', PCA(n_components= 5))
+                             ])),
+                     ('feat_select', SelectKBest(k=70)),
+                     ('lgbm', LGBMRegressor(metric = 'mae'))
+                     
+])
 
 parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
                     feat_select__k=[10, 25, 50, 75], 
-                    random_forest__n_estimators=[50, 100, 200],
-                    random_forest__min_samples_split=[2, 3, 4, 5, 10])
+                    lgbm__boosting_type = ['gbdt', 'dart'],
+                    lgbm__learning_rate = [0.001, 0.1, 1],
+                    lgbm__n_estimators = [20, 80, 100],
+                    lgbm__max_depth = [10, 4, 1],
+                    lgbm__num_leaves = [5, 20, 30],
+                    lgbm__sub_feature = [0.25, 0.75, 0.95],
+                    lgbm__bagging_fraction = [0.25, 0.75, 0.95],
+                    lgbm__min_data = [20, 100, 500],
+                    lgbm__min_hessian = [1, 10]
+                                                     
+)
 
-pipeline = Pipeline([('imp', imp),
-                     ('feat_select', select),
-                     ('random_forest', clf)
-                     
-])
+
 
 CV = GridSearchCV(pipeline, parameters, scoring = 'mean_absolute_error', 
                   n_jobs= resLog['coresUsed'])
