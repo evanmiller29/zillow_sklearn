@@ -97,26 +97,6 @@ params['max_depth'] = 10
 resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
 
 #==============================================================================
-# Grid search params
-#==============================================================================
-
-estimator = lgb.LGBMRegressor()
- 
-param_grid = {
-'metric': ['mae'],
-'boosting_type': ['gbdt', 'dart'],
-'learning_rate': [0.001, 0.1, 1],
-'n_estimators': [20, 80, 100],
-'max_depth': [10, 4, 1],
-'num_leaves': [5, 20, 30],
-'sub_feature': [0.25, 0.75, 0.95],
-'bagging_fraction': [0.25, 0.75, 0.95],
-'min_data': [20, 100, 500],
-'min_hessian': [1, 10]
- 
-}
-
-#==============================================================================
 # Feature engineering
 #==============================================================================
 
@@ -180,11 +160,8 @@ x_valid = x_valid.values.astype(np.float32, copy=False)
 
 resLog['model'] = 'lightGBM'
 
-d_train = lgb.Dataset(x_train, label=y_train)
-d_valid = lgb.Dataset(x_valid, label=y_valid)
-
 #==============================================================================
-# Setting up model run
+# Setting up model run - Pipelines
 #==============================================================================
 
 pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
@@ -213,51 +190,14 @@ parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
                                                      
 )
 
-
-
 CV = GridSearchCV(pipeline, parameters, scoring = 'mean_absolute_error', 
                   n_jobs= resLog['coresUsed'])
-
-CV.fit(x_train, y_train)    
- 
-    
-
-if resLog['grid_search'] == True:
-    
-    print('Running parameter search..')
-    
-    start = time.time()
-    resLog['startTimeGrid'] = dt.datetime.fromtimestamp(start).strftime('%c')
-    
-    CV = GridSearchCV(estimator, param_grid, n_jobs= resLog['coresUsed'])
-    CV.fit(x_train, y_train)
-    
-    end = time.time()
-    
-    timeElapsed = end - start
-    
-    m, s = divmod(timeElapsed, 60)
-    h, m = divmod(m, 60)
-    
-    resLog['timeElapsedGrid'] = "%d:%02d:%02d" % (h, m, s)
-    
-    params = CV.best_params_
-    
-    print('Best parameters found by grid search are:', params)
-    
-    resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
-    
-if resLog['grid_search'] == False:
-    
-    resLog['startTimeGrid'] = np.nan
-    resLog['timeElapsedGrid'] = np.nan
-
-watchlist = [d_valid]
 
 start = time.time()
 resLog['startTime'] = dt.datetime.fromtimestamp(start).strftime('%c')
 
-clf = lgb.train(params, d_train, 1000, watchlist)
+CV.fit(x_train, y_train)    
+
 end = time.time()
 
 timeElapsed = end - start
@@ -266,15 +206,18 @@ m, s = divmod(timeElapsed, 60)
 h, m = divmod(m, 60)
 
 resLog['timeElapsed'] = "%d:%02d:%02d" % (h, m, s)
+ 
+print(CV.best_params_)    
+print(CV.best_score_)    
 
-y_pred = clf.predict(x_valid, num_iteration=clf.best_iteration)
+y_pred = CV.predict(x_valid)
 resLog['cvAcc'] = round(MAE(y_valid, y_pred), 5)
 
 #==============================================================================
 # Preparing the submission
 #==============================================================================
 
-clf.reset_parameter({"num_threads":4})
+CV.reset_parameter({"num_threads":4})
 
 print( "\nPredicting using LightGBM and month features: ..." )
 
@@ -293,10 +236,9 @@ for i in range(len(test_dates)):
         
     x_test = x_test.values.astype(np.float32, copy=False)
 
-    pred = clf.predict(x_test, num_iteration = clf.best_iteration)
+    pred = CV.predict(x_test)
     sample[test_columns[i]] = [float(format(x, '.4f')) for x in pred]
     print('predict...', test_dates[i])    
-
 
 #==============================================================================
 # Saving predictions to file
