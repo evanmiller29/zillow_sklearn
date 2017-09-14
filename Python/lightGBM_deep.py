@@ -171,7 +171,7 @@ pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
                              ('pca5', PCA(n_components= 5)),
                              ('pca10', PCA(n_components= 5))
                              ])),
-                     ('feat_select', SelectKBest(k=70)),
+                     ('feat_select', SelectKBest(),
                      ('lgbm', LGBMRegressor(metric = 'mae'))
                      
 ])
