@@ -12,16 +12,23 @@ Created on Wed Aug 09 21:38:45 2017
 import numpy as np
 import pandas as pd
 import lightgbm as lgb
+from lightgbm import LGBMRegressor
 from datetime import datetime
 import datetime as dt
 from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import SelectKBest
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.preprocessing import Imputer, PolynomialFeatures
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestRegressor
 import os
 import time
 
-project = 'Zillow'
-basePath = 'C:/Users/Evan/Documents/GitHub/' + project
-funcPath = basePath + '/code/Python'
-subPath = 'F:/Nerdy Stuff/Kaggle submissions/' + project
+homeComp = True # If home comp reduce the train set to ensure it doesn't blow out the memory
+
+basePath = 'C:/Users/Evan/Documents/GitHub/Zillow'
+funcPath = 'C:/Users/Evan/Documents/GitHub/zillow_sklearn/Python'
+subPath = 'F:/Nerdy Stuff/Kaggle submissions/Zillow'
 
 os.chdir(basePath)
 
@@ -70,45 +77,7 @@ resLog['majorRedRate'] = 0.2
 funcsUsed = ['ExtractTimeFeats', 'sqFtFeat', 'ExpFeatures']
 resLog['funcsUsed'] = ', '.join(funcsUsed)
 
-resLog['grid_search'] = True
 
-#==============================================================================
-# Model hyperparameters
-#==============================================================================
-
-params = {}
-params['learning_rate'] = 0.0001
-params['boosting_type'] = 'gbdt'
-params['objective'] = 'regression'
-params['metric'] = 'mae'
-params['sub_feature'] = 0.50
-params['num_leaves'] = 60
-params['min_data'] = 500
-params['min_hessian'] = 1
-params['bagging_fraction'] = 0.55
-params['max_depth'] = 10
-
-resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
-
-#==============================================================================
-# Grid search params
-#==============================================================================
-
-estimator = lgb.LGBMRegressor()
- 
-param_grid = {
-'metric': ['mae'],
-'boosting_type': ['gbdt', 'dart'],
-'learning_rate': [0.001, 0.1, 1],
-'n_estimators': [20, 80, 100],
-'max_depth': [10, 4, 1],
-'num_leaves': [5, 20, 30],
-'sub_feature': [0.25, 0.75, 0.95],
-'bagging_fraction': [0.25, 0.75, 0.95],
-'min_data': [20, 100, 500],
-'min_hessian': [1, 10]
- 
-}
 
 #==============================================================================
 # Feature engineering
@@ -123,7 +92,9 @@ df_train = (train.merge(properties, how='left', on='parcelid')
 
 DataFrameDeets(df_train, 'train + properties file - before feat engineering..')
 
-df_train = ApplyFeatEngineering(df_train, 'training + properties set', funcsUsed)
+#==============================================================================
+# df_train = ApplyFeatEngineering(df_train, 'training + properties set', funcsUsed)
+#==============================================================================
 
 #==============================================================================
 # Splitting off a validation set
@@ -148,6 +119,14 @@ DataFrameDeets(valid, 'validation')
 # Preparing the data for modelling
 #==============================================================================
 
+if (homeComp == True):
+    
+    print('Reducing the training set for testing..')
+    
+    train = train.sample(frac = 0.5)
+    DataFrameDeets(train, 'train for home prototyping')    
+    
+
 x_train = train.drop(dropCols, axis=1)
 y_train = train['logerror'].values
 print(x_train.shape, y_train.shape)
@@ -159,64 +138,60 @@ print(x_valid.shape, y_valid.shape)
 train_columns = x_train.columns
 valid_columns = x_valid.columns
 
+#==============================================================================
+# for c in x_train.dtypes[x_train.dtypes == object].index.values:
+#     x_train[c] = (x_train[c] == True)
+# 
+# x_train = ConvertCats(x_train) 
+# 
+# for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
+#     x_valid[c] = (x_valid[c] == True)
+# 
+# x_valid = ConvertCats(x_valid) 
+# 
+# x_train = x_train.values.astype(np.float32, copy=False)
+# x_valid = x_valid.values.astype(np.float32, copy=False)
+#==============================================================================
+
+#==============================================================================
+# Setting up model run - Pipelines
+#==============================================================================
+
 for c in x_train.dtypes[x_train.dtypes == object].index.values:
     x_train[c] = (x_train[c] == True)
-
-x_train = ConvertCats(x_train) 
 
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
 
-x_valid = ConvertCats(x_valid) 
+pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
+                     ('feats', FeatureUnion([
+                             ('feat2', PolynomialFeatures(2)),
+                             ('feat3', PolynomialFeatures(3)),
+                             ('pca5', PCA(n_components= 5)),
+                             ('pca10', PCA(n_components= 10))
+                             ])),
+                     ('feat_select', SelectKBest()),
+                     ('rf', RandomForestRegressor())
+                     
+])
 
-x_train = x_train.values.astype(np.float32, copy=False)
-x_valid = x_valid.values.astype(np.float32, copy=False)
+parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
+                    feat_select__k=[10, 25, 50, 75], 
+                    rf__n_estimators = [20, 80, 100]
+                                                     
+)    
 
-resLog['model'] = 'lightGBM'
-
-d_train = lgb.Dataset(x_train, label=y_train)
-d_valid = lgb.Dataset(x_valid, label=y_valid)
-
-#==============================================================================
-# Setting up model run
-#==============================================================================
-
-if resLog['grid_search'] == True:
-    
-    print('Running parameter search..')
-    
-    start = time.time()
-    resLog['startTimeGrid'] = dt.datetime.fromtimestamp(start).strftime('%c')
-    
-    CV = GridSearchCV(estimator, param_grid, n_jobs= resLog['coresUsed'])
-    CV.fit(x_train, y_train)
-    
-    end = time.time()
-    
-    timeElapsed = end - start
-    
-    m, s = divmod(timeElapsed, 60)
-    h, m = divmod(m, 60)
-    
-    resLog['timeElapsedGrid'] = "%d:%02d:%02d" % (h, m, s)
-    
-    params = CV.best_params_
-    
-    print('Best parameters found by grid search are:', params)
-    
-    resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
-    
-if resLog['grid_search'] == False:
-    
-    resLog['startTimeGrid'] = np.nan
-    resLog['timeElapsedGrid'] = np.nan
-
-watchlist = [d_valid]
+CV = GridSearchCV(pipeline, parameters, scoring = 'mean_absolute_error', 
+                  n_jobs= 4)
 
 start = time.time()
 resLog['startTime'] = dt.datetime.fromtimestamp(start).strftime('%c')
 
-clf = lgb.train(params, d_train, 1000, watchlist)
+CV.fit(x_train, y_train)    
+
+y_pred = CV.predict(x_valid)
+resLog['cvAcc'] = round(MAE(y_valid, y_pred), 5)
+
 end = time.time()
 
 timeElapsed = end - start
@@ -225,15 +200,18 @@ m, s = divmod(timeElapsed, 60)
 h, m = divmod(m, 60)
 
 resLog['timeElapsed'] = "%d:%02d:%02d" % (h, m, s)
+ 
+print(CV.best_params_)    
+print(CV.best_score_)    
 
-y_pred = clf.predict(x_valid, num_iteration=clf.best_iteration)
+y_pred = CV.predict(x_valid)
 resLog['cvAcc'] = round(MAE(y_valid, y_pred), 5)
 
 #==============================================================================
 # Preparing the submission
 #==============================================================================
 
-clf.reset_parameter({"num_threads":4})
+CV.reset_parameter({"num_threads":4})
 
 print( "\nPredicting using LightGBM and month features: ..." )
 
@@ -252,10 +230,9 @@ for i in range(len(test_dates)):
         
     x_test = x_test.values.astype(np.float32, copy=False)
 
-    pred = clf.predict(x_test, num_iteration = clf.best_iteration)
+    pred = CV.predict(x_test)
     sample[test_columns[i]] = [float(format(x, '.4f')) for x in pred]
     print('predict...', test_dates[i])    
-
 
 #==============================================================================
 # Saving predictions to file
@@ -265,24 +242,3 @@ print('Saving predictions to file..')
 
 os.chdir(subPath)
 sample.to_csv('sub{}_{}.csv'.format(datetime.now().strftime('%Y%m%d_%H%M%S'), resLog['cvAcc']), index=False, float_format='%.4f')
-
-#==============================================================================
-# Logging outputs
-#==============================================================================
-
-print('Outputting logs..')
-
-os.chdir(basePath)
-
-logDF = (pd.DataFrame(list(resLog.items()))
-            .rename(columns = {0: 'desc', 1: 'values'})
-            .pivot(columns = 'desc')
-            .fillna(method = 'ffill')
-            .fillna(method = 'bfill'))
-            
-cols = [val[1] for val in logDF.columns.values]
-logDF.columns = cols
-           
-logs = pd.read_csv('modelling_log.csv')
-logDF = logs.append(logDF.loc[0, :])
-logDF.to_csv('modelling_log.csv', index_label = False, index = False)
