@@ -152,6 +152,10 @@ x_train = train.drop(dropCols, axis=1)
 y_train = train['logerror'].values
 print(x_train.shape, y_train.shape)
 
+
+
+cats = x_train.dtypes[:, ]
+
 x_valid = valid.drop(dropCols, axis=1)
 y_valid = valid['logerror'].values
 print(x_valid.shape, y_valid.shape)

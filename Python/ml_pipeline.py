@@ -123,7 +123,7 @@ if (homeComp == True):
     
     print('Reducing the training set for testing..')
     
-    train = train.sample(frac = 0.5)
+    train = train.sample(frac = 0.2)
     DataFrameDeets(train, 'train for home prototyping')    
     
 
@@ -143,10 +143,7 @@ valid_columns = x_valid.columns
 #     x_train[c] = (x_train[c] == True)
 # 
 # x_train = ConvertCats(x_train) 
-# 
-# for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
-#     x_valid[c] = (x_valid[c] == True)
-# 
+
 # x_valid = ConvertCats(x_valid) 
 # 
 # x_train = x_train.values.astype(np.float32, copy=False)
@@ -163,12 +160,17 @@ for c in x_train.dtypes[x_train.dtypes == object].index.values:
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
 
+import numpy as np
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
+
+logTransformer = FunctionTransformer(np.log1p)
+
 pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
+                     ('scaler', StandardScaler(copy=True, feature_range=(0, 1))),
                      ('feats', FeatureUnion([
                              ('feat2', PolynomialFeatures(2)),
-                             ('feat3', PolynomialFeatures(3)),
                              ('pca5', PCA(n_components= 5)),
-                             ('pca10', PCA(n_components= 10))
+                             ('pca10', PCA(n_components= 10)),
                              ])),
                      ('feat_select', SelectKBest()),
                      ('rf', RandomForestRegressor())
@@ -182,10 +184,10 @@ parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
 )    
 
 CV = GridSearchCV(pipeline, parameters, scoring = 'mean_absolute_error', 
-                  n_jobs= 4)
+                  n_jobs= 1)
 
 start = time.time()
-resLog['startTime'] = dt.datetime.fromtimestamp(start).strftime('%c')
+startTime = dt.datetime.fromtimestamp(start).strftime('%c')
 
 CV.fit(x_train, y_train)    
 
