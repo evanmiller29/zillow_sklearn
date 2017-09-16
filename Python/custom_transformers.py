@@ -56,12 +56,22 @@ class FeatureCustomLogger(BaseEstimator, TransformerMixin):
 #==============================================================================
 
 class ColumnExtractor(BaseEstimator, TransformerMixin):
-    def __init__(self, factor):
-        self.factor = factor
+    def __init__(self, subset):
+        self.subset = subset
 
     def transform(self, X, *_):
-        return 
+        return X.loc[:, self.subset]
 
     def fit(self, *_):
         return self
 
+#==============================================================================
+# Testing
+# 
+# x_valid.head()
+# x = x_train.loc[:, x_train.dtypes == 'object']
+# print(x.head())
+# 
+# objFeat = ColumnExtractor('object')
+# objFeat.transform(x_valid).head()
+#==============================================================================

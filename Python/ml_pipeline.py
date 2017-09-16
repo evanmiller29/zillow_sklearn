@@ -53,7 +53,7 @@ os.chdir(funcPath)
 
 from modelFuncs import MAE, TrainValidSplit
 from dataPrep import DataFrameDeets, ConvertCats
-from featEngineering import ApplyFeatEngineering
+from custom_transformers import ColumnExtractor
 
 #==============================================================================
 # Setting up results logging
@@ -76,8 +76,6 @@ resLog['majorRedRate'] = 0.2
 
 funcsUsed = ['ExtractTimeFeats', 'sqFtFeat', 'ExpFeatures']
 resLog['funcsUsed'] = ', '.join(funcsUsed)
-
-
 
 #==============================================================================
 # Feature engineering
@@ -138,6 +136,10 @@ print(x_valid.shape, y_valid.shape)
 train_columns = x_train.columns
 valid_columns = x_valid.columns
 
+boolVars = ['hashottuborspa', 'fireplaceflag', 'taxdelinquencyflag']
+x_train = x_train[boolVars].astype(bool)
+x_valid = x_valid[boolVars].astype(bool)
+
 #==============================================================================
 # for c in x_train.dtypes[x_train.dtypes == object].index.values:
 #     x_train[c] = (x_train[c] == True)
@@ -156,14 +158,11 @@ valid_columns = x_valid.columns
 
 for c in x_train.dtypes[x_train.dtypes == object].index.values:
     x_train[c] = (x_train[c] == True)
-
+    
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
 
-import numpy as np
-from sklearn.preprocessing import FunctionTransformer, StandardScaler
-
-logTransformer = FunctionTransformer(np.log1p)
+from sklearn.preprocessing import StandardScaler
 
 pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
                      ('scaler', StandardScaler(copy=True, feature_range=(0, 1))),
@@ -191,23 +190,19 @@ startTime = dt.datetime.fromtimestamp(start).strftime('%c')
 
 CV.fit(x_train, y_train)    
 
-y_pred = CV.predict(x_valid)
-resLog['cvAcc'] = round(MAE(y_valid, y_pred), 5)
-
 end = time.time()
-
 timeElapsed = end - start
 
 m, s = divmod(timeElapsed, 60)
 h, m = divmod(m, 60)
 
-resLog['timeElapsed'] = "%d:%02d:%02d" % (h, m, s)
+print("Time elapsed: %d:%02d:%02d" % (h, m, s))
  
 print(CV.best_params_)    
 print(CV.best_score_)    
 
 y_pred = CV.predict(x_valid)
-resLog['cvAcc'] = round(MAE(y_valid, y_pred), 5)
+print('MAE on validation set: ' % (round(MAE(y_valid, y_pred), 5)))
 
 #==============================================================================
 # Preparing the submission

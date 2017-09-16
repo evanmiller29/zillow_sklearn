@@ -18,10 +18,9 @@ from sklearn.model_selection import GridSearchCV
 import os
 import time
 
-project = 'Zillow'
-basePath = 'C:/Users/Evan/Documents/GitHub/' + project
-funcPath = basePath + '/code/Python'
-subPath = 'F:/Nerdy Stuff/Kaggle submissions/' + project
+basePath = 'C:/Users/Evan/Documents/GitHub/Zillow'
+funcPath = 'C:/Users/Evan/Documents/GitHub/zillow_sklearn/Python'
+subPath = 'F:/Nerdy Stuff/Kaggle submissions/Zillow'
 
 os.chdir(basePath)
 
@@ -71,23 +70,6 @@ funcsUsed = ['ExtractTimeFeats', 'sqFtFeat', 'ExpFeatures']
 resLog['funcsUsed'] = ', '.join(funcsUsed)
 
 resLog['grid_search'] = True
-
-#==============================================================================
-# Model hyperparameters
-#==============================================================================
-
-params = {}
-params['learning_rate'] = 0.0001
-params['boosting_type'] = 'gbdt'
-params['objective'] = 'regression'
-params['metric'] = 'mae'
-params['sub_feature'] = 0.50
-params['num_leaves'] = 60
-params['min_data'] = 500
-params['min_hessian'] = 1
-params['bagging_fraction'] = 0.55
-params['max_depth'] = 10
-
 resLog['paramsUsed'] = ', '.join([k + ' = ' + str(v) for k, v in params.items()])
 
 #==============================================================================
