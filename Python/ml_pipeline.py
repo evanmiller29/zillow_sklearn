@@ -198,7 +198,11 @@ pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
 #==============================================================================
 # In progress. The above works, but the below doesn't
 #==============================================================================
-    
+
+#==============================================================================
+# Try and check function transformer works like this:
+# http://scikit-learn.org/stable/auto_examples/preprocessing/plot_function_transformer.html    
+#==============================================================================
 pipelineBigger = Pipeline([
     ('features', FeatureUnion([
         ('continuous', Pipeline([
