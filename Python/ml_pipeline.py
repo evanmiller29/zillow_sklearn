@@ -215,7 +215,7 @@ print(CV.best_params_)
 print(CV.best_score_)    
 
 y_pred = CV.predict(x_valid)
-print('MAE on validation set: ' % (round(MAE(y_valid, y_pred), 5)))
+print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5)))
 
 #==============================================================================
 # Preparing the submission
