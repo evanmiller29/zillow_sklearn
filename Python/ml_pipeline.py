@@ -145,8 +145,14 @@ idCols = [col for col in train_columns if 'id' in col] + ['taxdelinquencyyear', 
 countCols = [col for col in train_columns if 'cnt' in col] + ['yearbuilt', 'assessmentyear', 'calculatedbathnbr', 'censustractandblock', 
                                                                 'numberofstories'] #Unsure about censustractandblock
 ttlCol = idCols + countCols
-
 contCols = [col for col in train_columns if col not in ttlCol]
+
+#==============================================================================
+# Filling missing values of categorical variables
+#==============================================================================
+
+x_train[idCols] = x_train[idCols].fillna(0)
+x_valid[idCols] = x_valid[idCols].fillna(0)
 
 #==============================================================================
 # Recoding rare sq ft variables..
@@ -176,26 +182,51 @@ for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
 
 # Look into dropping variables with too much missingness
 
-pipeline = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
+pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
                      ('imp', Imputer(missing_values='NaN', axis=0)),
                      ('scaler', StandardScaler()),
                      ('feats', FeatureUnion([
                              ('feat2', PolynomialFeatures(2)),
                              ('pca5', PCA(n_components= 5)),
-                             ('pca10', PCA(n_components= 10)),
+                             ('pca10', PCA(n_components= 10))
                              ])),
                      ('feat_select', SelectKBest()),
                      ('rf', RandomForestRegressor())
                      
 ])
 
+#==============================================================================
+# In progress. The above works, but the below doesn't
+#==============================================================================
+    
+pipelineBigger = Pipeline([
+    ('features', FeatureUnion([
+        ('continuous', Pipeline([
+            ('extract', ColumnExtractor(contCols)),
+            ('scaler', StandardScaler()),
+            ('addContFeats', FeatureUnion([
+                    ('feat2', PolynomialFeatures(2)),
+                    ('pca5', PCA(n_components= 5)),
+                    ('pca10', PCA(n_components= 10))
+                    ]))
+        ])),
+        ('factors', Pipeline([
+            ('extract', ColumnExtractor(idCols)),
+            ('one_hot', OneHotEncoder(n_values=5))
+        ]))
+    ])),
+    ('feat_select', SelectKBest()),
+    ('rf', RandomForestRegressor())
+                     
+])
+     
 parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
                     feat_select__k=[10, 25, 50, 75], 
                     rf__n_estimators = [20, 80, 100]
                                                      
 )    
 
-CV = GridSearchCV(pipeline, parameters, scoring = 'mean_absolute_error', 
+CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', 
                   n_jobs= 1)
 
 start = time.time()
@@ -215,7 +246,7 @@ print(CV.best_params_)
 print(CV.best_score_)    
 
 y_pred = CV.predict(x_valid)
-print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5)))
+print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5))) #MAE on validation set: 0.0757
 
 #==============================================================================
 # Preparing the submission
