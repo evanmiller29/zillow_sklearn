@@ -72,6 +72,6 @@ class ColumnExtractor(BaseEstimator, TransformerMixin):
 # x = x_train.loc[:, x_train.dtypes == 'object']
 # print(x.head())
 # 
-# objFeat = ColumnExtractor('object')
+# objFeat = ColumnExtractor(['colA', 'colB', 'colC'])
 # objFeat.transform(x_valid).head()
 #==============================================================================

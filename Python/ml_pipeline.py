@@ -18,7 +18,7 @@ import datetime as dt
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import SelectKBest
 from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.preprocessing import Imputer, PolynomialFeatures
+from sklearn.preprocessing import Imputer, PolynomialFeatures, StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestRegressor
 import os
@@ -137,8 +137,20 @@ train_columns = x_train.columns
 valid_columns = x_valid.columns
 
 boolVars = ['hashottuborspa', 'fireplaceflag', 'taxdelinquencyflag']
-x_train = x_train[boolVars].astype(bool)
-x_valid = x_valid[boolVars].astype(bool)
+x_train[boolVars] = x_train[boolVars].astype(bool)
+x_valid[boolVars] = x_valid[boolVars].astype(bool)
+
+idCols = [col for col in train_columns if 'id' in col] + ['taxdelinquencyyear', 'taxdelinquencyflag', 'fireplaceflag', 'fips',
+                                                             'hashottuborspa']
+countCols = [col for col in train_columns if 'cnt' in col] + ['yearbuilt', 'assessmentyear', 'calculatedbathnbr', 'censustractandblock', 
+                                                                'numberofstories'] #Unsure about censustractandblock
+ttlCol = idCols + countCols
+
+contCols = [col for col in train_columns if col not in ttlCol]
+
+#==============================================================================
+# Recoding rare sq ft variables..
+#==============================================================================
 
 #==============================================================================
 # for c in x_train.dtypes[x_train.dtypes == object].index.values:
@@ -162,10 +174,11 @@ for c in x_train.dtypes[x_train.dtypes == object].index.values:
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
 
-from sklearn.preprocessing import StandardScaler
+# Look into dropping variables with too much missingness
 
-pipeline = Pipeline([('imp', Imputer(missing_values='NaN', axis=0)),
-                     ('scaler', StandardScaler(copy=True, feature_range=(0, 1))),
+pipeline = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
+                     ('imp', Imputer(missing_values='NaN', axis=0)),
+                     ('scaler', StandardScaler()),
                      ('feats', FeatureUnion([
                              ('feat2', PolynomialFeatures(2)),
                              ('pca5', PCA(n_components= 5)),
