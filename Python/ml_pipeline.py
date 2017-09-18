@@ -204,60 +204,58 @@ pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
 # http://scikit-learn.org/stable/auto_examples/hetero_feature_union.html   
 #==============================================================================
 
-pipelineBigger = Pipeline([
-        ('union', FeatureUnion([
-            ('continuous', Pipeline([
-                    ('contExtract', ColumnExtractor(contVars)),
-                    ('imp', Imputer(missing_values='NaN', axis=0)),
-                    ('feats', FeatureUnion([
-                                 ('feat2', PolynomialFeatures(2)),
-                                 ('pca5', PCA(n_components= 5)),
-                                 ('pca10', PCA(n_components= 10))
-                                 ])),
-                    ('scaler', StandardScaler()),
-                    ])
-            ), 
-            ('factors', Pipeline([
-                    ('factExtract', ColumnExtractor(idVars)),
-                    ('ohe', OneHotEncoder(n_values=5))
+models = [RandomForestRegressor(), LGBMRegressor()]
+
+for reg in models:
+
+    pipelineBigger = Pipeline([
+            ('union', FeatureUnion([
+                ('continuous', Pipeline([
+                        ('contExtract', ColumnExtractor(contVars)),
+                        ('imp', Imputer(missing_values='NaN', axis=0)),
+                        ('feats', FeatureUnion([
+                                     ('feat2', PolynomialFeatures(2)),
+                                     ('pca5', PCA(n_components= 5)),
+                                     ('pca10', PCA(n_components= 10))
+                                     ])),
+                        ('scaler', StandardScaler()),
+                        ])
+                ), 
+                ('factors', Pipeline([
+                        ('factExtract', ColumnExtractor(idVars)),
+                        ('ohe', OneHotEncoder(n_values=5))
+                        ])),
+                ('taxVars', Pipeline([
+                        ('taxExtract', ColumnExtractor(taxVars)),
+                        ('feats', FeatureUnion([
+                                     ('feat2', PolynomialFeatures(2)),
+                                     ('pca5', PCA(n_components= 5)),
+                                     ('pca10', PCA(n_components= 10))
+                                     ]))
+                        ]))                
                     ])),
-            ('taxVars', Pipeline([
-                    ('taxExtract', ColumnExtractor(taxVars)),
-                    ('feats', FeatureUnion([
-                                 ('feat2', PolynomialFeatures(2)),
-                                 ('pca5', PCA(n_components= 5)),
-                                 ('pca10', PCA(n_components= 10))
-                                 ]))
-                    ]))                
-                ])),
-    ('feat_select', SelectKBest()),
-    ('rf', RandomForestRegressor())              
-])
-     
-parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
-                    feat_select__k=[10, 25, 50, 75], 
-                    rf__n_estimators = [20]
-                                                     
-)    
-
-CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', n_jobs= 1)
-
-start = dt.datetime.fromtimestamp(time.time()).strftime('%c')
-CV.fit(x_train, y_train)    
-
-end = time.time()
-timeElapsed = end - start
-
-m, s = divmod(timeElapsed, 60)
-h, m = divmod(m, 60)
-
-print("Time elapsed: %d:%02d:%02d" % (h, m, s))
- 
-print(CV.best_params_)    
-print(CV.best_score_)    
-
-y_pred = CV.predict(x_valid)
-print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5))) #MAE on validation set: 0.0757
+        ('feat_select', SelectKBest()),
+        ('clf', reg)              
+    ])
+         
+    parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
+                        feat_select__k=[10, 25, 50, 75] 
+                                                                             
+    )    
+    
+    CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', n_jobs= 1)
+    
+    
+    start = dt.datetime.fromtimestamp(time.time()).strftime('%c')
+    CV.fit(x_train, y_train)    
+    
+    end = dt.datetime.fromtimestamp(time.time()).strftime('%c')
+    
+    print(CV.best_params_)    
+    print(CV.best_score_)    
+    
+    y_pred = CV.predict(x_valid)
+    print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5)))
 
 #==============================================================================
 # Preparing the submission
