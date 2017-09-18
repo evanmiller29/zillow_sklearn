@@ -207,7 +207,7 @@ pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
 pipelineBigger = Pipeline([
         ('union', FeatureUnion([
             ('continuous', Pipeline([
-                    ('contExtract', ColumnExtractor(contCols)),
+                    ('contExtract', ColumnExtractor(contVars)),
                     ('imp', Imputer(missing_values='NaN', axis=0)),
                     ('feats', FeatureUnion([
                                  ('feat2', PolynomialFeatures(2)),
@@ -218,8 +218,16 @@ pipelineBigger = Pipeline([
                     ])
             ), 
             ('factors', Pipeline([
-                    ('factExtract', ColumnExtractor(idCols)),
+                    ('factExtract', ColumnExtractor(idVars)),
                     ('ohe', OneHotEncoder(n_values=5))
+                    ])),
+            ('taxVars', Pipeline([
+                    ('taxExtract', ColumnExtractor(taxVars)),
+                    ('feats', FeatureUnion([
+                                 ('feat2', PolynomialFeatures(2)),
+                                 ('pca5', PCA(n_components= 5)),
+                                 ('pca10', PCA(n_components= 10))
+                                 ]))
                     ]))                
                 ])),
     ('feat_select', SelectKBest()),
