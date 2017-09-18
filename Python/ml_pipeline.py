@@ -136,36 +136,42 @@ print(x_valid.shape, y_valid.shape)
 train_columns = x_train.columns
 valid_columns = x_valid.columns
 
+print('Converting some rogue booleans back to their proper format..')
+
 boolVars = ['hashottuborspa', 'fireplaceflag', 'taxdelinquencyflag']
 x_train[boolVars] = x_train[boolVars].astype(bool)
 x_valid[boolVars] = x_valid[boolVars].astype(bool)
 
-idCols = [col for col in train_columns if 'id' in col] + ['taxdelinquencyyear', 'taxdelinquencyflag', 'fireplaceflag', 'fips',
-                                                             'hashottuborspa']
-countCols = [col for col in train_columns if 'cnt' in col] + ['yearbuilt', 'assessmentyear', 'calculatedbathnbr', 'censustractandblock', 
-                                                                'numberofstories'] #Unsure about censustractandblock
-ttlCol = idCols + countCols
-contCols = [col for col in train_columns if col not in ttlCol]
+print('Separating out the different variable types so I can perform different pipelines..')
+
+idVars = [i for e in ['id',  'flag', 'has'] for i in list(train_columns) if e in i] + ['fips', 'hashottuborspa']
+countVars = [i for e in ['cnt',  'year', 'nbr', 'number'] for i in list(train_columns) if e in i]
+taxVars = [col for col in train_columns if 'tax' in col and 'flag' not in col]
+          
+ttlVars = idVars + countVars + taxVars
+exclVars = [i for e in ['census',  'tude'] for i in list(train_columns) if e in i]
+
+contVars = [col for col in train_columns if col not in ttlVars + exclVars]
 
 #==============================================================================
-# Filling missing values of categorical variables
+# Filling missing values of categorical / tax variables
 #==============================================================================
 
-x_train[idCols] = x_train[idCols].fillna(0)
-x_valid[idCols] = x_valid[idCols].fillna(0)
+print('Filling the sparse categorical variables with 0..')
+
+x_train[idVars] = x_train[idVars].fillna(0)
+x_valid[idVars] = x_valid[idVars].fillna(0)
+
+print('Filling the sparse tax variables with 0..')
+
+x_train[taxVars] = x_train[taxVars].fillna(0)
+x_valid[taxVars] = x_valid[taxVars].fillna(0)
 
 #==============================================================================
 # Recoding rare sq ft variables..
 #==============================================================================
 
 #==============================================================================
-# for c in x_train.dtypes[x_train.dtypes == object].index.values:
-#     x_train[c] = (x_train[c] == True)
-# 
-# x_train = ConvertCats(x_train) 
-
-# x_valid = ConvertCats(x_valid) 
-# 
 # x_train = x_train.values.astype(np.float32, copy=False)
 # x_valid = x_valid.values.astype(np.float32, copy=False)
 #==============================================================================
@@ -179,8 +185,6 @@ for c in x_train.dtypes[x_train.dtypes == object].index.values:
     
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
-
-# Look into dropping variables with too much missingness
 
 pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
                      ('imp', Imputer(missing_values='NaN', axis=0)),
@@ -196,46 +200,41 @@ pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
 ])
 
 #==============================================================================
-# In progress. The above works, but the below doesn't
+# Try and check function transformer works like this:
+# http://scikit-learn.org/stable/auto_examples/hetero_feature_union.html   
 #==============================================================================
 
-#==============================================================================
-# Try and check function transformer works like this:
-# http://scikit-learn.org/stable/auto_examples/preprocessing/plot_function_transformer.html    
-#==============================================================================
 pipelineBigger = Pipeline([
-    ('features', FeatureUnion([
-        ('continuous', Pipeline([
-            ('extract', ColumnExtractor(contCols)),
-            ('scaler', StandardScaler()),
-            ('addContFeats', FeatureUnion([
-                    ('feat2', PolynomialFeatures(2)),
-                    ('pca5', PCA(n_components= 5)),
-                    ('pca10', PCA(n_components= 10))
-                    ]))
-        ])),
-        ('factors', Pipeline([
-            ('extract', ColumnExtractor(idCols)),
-            ('one_hot', OneHotEncoder(n_values=5))
-        ]))
-    ])),
+        ('union', FeatureUnion([
+            ('continuous', Pipeline([
+                    ('contExtract', ColumnExtractor(contCols)),
+                    ('imp', Imputer(missing_values='NaN', axis=0)),
+                    ('feats', FeatureUnion([
+                                 ('feat2', PolynomialFeatures(2)),
+                                 ('pca5', PCA(n_components= 5)),
+                                 ('pca10', PCA(n_components= 10))
+                                 ])),
+                    ('scaler', StandardScaler()),
+                    ])
+            ), 
+            ('factors', Pipeline([
+                    ('factExtract', ColumnExtractor(idCols)),
+                    ('ohe', OneHotEncoder(n_values=5))
+                    ]))                
+                ])),
     ('feat_select', SelectKBest()),
-    ('rf', RandomForestRegressor())
-                     
+    ('rf', RandomForestRegressor())              
 ])
      
 parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
                     feat_select__k=[10, 25, 50, 75], 
-                    rf__n_estimators = [20, 80, 100]
+                    rf__n_estimators = [20]
                                                      
 )    
 
-CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', 
-                  n_jobs= 1)
+CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', n_jobs= 1)
 
-start = time.time()
-startTime = dt.datetime.fromtimestamp(start).strftime('%c')
-
+start = dt.datetime.fromtimestamp(time.time()).strftime('%c')
 CV.fit(x_train, y_train)    
 
 end = time.time()

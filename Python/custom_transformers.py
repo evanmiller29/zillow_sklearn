@@ -34,8 +34,6 @@ class FeatureMultiplier(BaseEstimator, TransformerMixin):
 #==============================================================================
 
 class FeatureCustomLogger(BaseEstimator, TransformerMixin):
-    def __init__(self, factor):
-        self.factor = factor
 
     def transform(self, X, *_):
         return np.log1p(X + 1)
