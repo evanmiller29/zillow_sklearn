@@ -60,22 +60,14 @@ from custom_transformers import ColumnExtractor
 #==============================================================================
 
 resLog = {}
-resLog ['coresUsed'] = 6
-
-featFuncs = ['ExtractTimeFeats', 'sqFtFeat']
-resLog['funcsUsed'] = ', '.join(featFuncs)
 
 dropCols = ['parcelid', 'logerror', 'transactiondate', 'propertyzoningdesc', 'propertycountylandusecode']
-resLog['colsDrop'] = ', '.join(dropCols)
 
 resLog['overSampTestMonths'] = False
 resLog['underSampElseMonths'] = False
 
 resLog['minorSampRate'] = 0.10
 resLog['majorRedRate'] = 0.2
-
-funcsUsed = ['ExtractTimeFeats', 'sqFtFeat', 'ExpFeatures']
-resLog['funcsUsed'] = ', '.join(funcsUsed)
 
 #==============================================================================
 # Feature engineering
@@ -123,8 +115,7 @@ if (homeComp == True):
     
     train = train.sample(frac = 0.2)
     DataFrameDeets(train, 'train for home prototyping')    
-    
-
+  
 x_train = train.drop(dropCols, axis=1)
 y_train = train['logerror'].values
 print(x_train.shape, y_train.shape)
@@ -186,7 +177,7 @@ for c in x_train.dtypes[x_train.dtypes == object].index.values:
 for c in x_valid.dtypes[x_valid.dtypes == object].index.values:
     x_valid[c] = (x_valid[c] == True)
 
-pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
+pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contVars)),
                      ('imp', Imputer(missing_values='NaN', axis=0)),
                      ('scaler', StandardScaler()),
                      ('feats', FeatureUnion([
@@ -204,58 +195,54 @@ pipelineSmall = Pipeline([(('cont_feats'), ColumnExtractor(contCols)),
 # http://scikit-learn.org/stable/auto_examples/hetero_feature_union.html   
 #==============================================================================
 
-models = [RandomForestRegressor(), LGBMRegressor()]
-
-for reg in models:
-
-    pipelineBigger = Pipeline([
-            ('union', FeatureUnion([
-                ('continuous', Pipeline([
-                        ('contExtract', ColumnExtractor(contVars)),
-                        ('imp', Imputer(missing_values='NaN', axis=0)),
-                        ('feats', FeatureUnion([
-                                     ('feat2', PolynomialFeatures(2)),
-                                     ('pca5', PCA(n_components= 5)),
-                                     ('pca10', PCA(n_components= 10))
-                                     ])),
-                        ('scaler', StandardScaler()),
-                        ])
-                ), 
-                ('factors', Pipeline([
-                        ('factExtract', ColumnExtractor(idVars)),
-                        ('ohe', OneHotEncoder(n_values=5))
-                        ])),
-                ('taxVars', Pipeline([
-                        ('taxExtract', ColumnExtractor(taxVars)),
-                        ('feats', FeatureUnion([
-                                     ('feat2', PolynomialFeatures(2)),
-                                     ('pca5', PCA(n_components= 5)),
-                                     ('pca10', PCA(n_components= 10))
-                                     ]))
-                        ]))                
+pipelineBigger = Pipeline([
+        ('union', FeatureUnion([
+            ('continuous', Pipeline([
+                    ('contExtract', ColumnExtractor(contVars)),
+                    ('imp', Imputer(missing_values='NaN', axis=0)),
+                    ('feats', FeatureUnion([
+                                 ('feat2', PolynomialFeatures(2)),
+                                 ('pca5', PCA(n_components= 5)),
+                                 ('pca10', PCA(n_components= 10))
+                                 ])),
+                    ('scaler', StandardScaler()),
+                    ])
+            ), 
+            ('factors', Pipeline([
+                    ('factExtract', ColumnExtractor(idVars)),
+                    ('ohe', OneHotEncoder(n_values=5))
                     ])),
-        ('feat_select', SelectKBest()),
-        ('clf', reg)              
-    ])
-         
-    parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
-                        feat_select__k=[10, 25, 50, 75] 
-                                                                             
-    )    
-    
-    CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', n_jobs= 1)
-    
-    
-    start = dt.datetime.fromtimestamp(time.time()).strftime('%c')
-    CV.fit(x_train, y_train)    
-    
-    end = dt.datetime.fromtimestamp(time.time()).strftime('%c')
-    
-    print(CV.best_params_)    
-    print(CV.best_score_)    
-    
-    y_pred = CV.predict(x_valid)
-    print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5)))
+            ('taxVars', Pipeline([
+                    ('taxExtract', ColumnExtractor(taxVars)),
+                    ('feats', FeatureUnion([
+                                 ('feat2', PolynomialFeatures(2)),
+                                 ('pca5', PCA(n_components= 5)),
+                                 ('pca10', PCA(n_components= 10))
+                                 ]))
+                    ]))                
+                ])),
+    ('feat_select', SelectKBest()),
+    ('clf', LGBMRegressor())              
+])
+     
+parameters = dict(imp__strategy=['mean', 'median', 'most_frequent'],
+                    feat_select__k=[10, 25, 50, 75] 
+                                                                         
+)    
+
+CV = GridSearchCV(pipelineSmall, parameters, scoring = 'mean_absolute_error', n_jobs= 1)
+
+
+start = dt.datetime.fromtimestamp(time.time()).strftime('%c')
+CV.fit(x_train, y_train)    
+
+end = dt.datetime.fromtimestamp(time.time()).strftime('%c')
+
+print(CV.best_params_)    
+print(CV.best_score_)    
+
+y_pred = CV.predict(x_valid)
+print('MAE on validation set: %s' % (round(MAE(y_valid, y_pred), 5)))
 
 #==============================================================================
 # Preparing the submission
