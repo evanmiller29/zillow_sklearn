@@ -17,7 +17,6 @@ import lightgbm as lgb
 import gc
 import datetime as dt
 import os
-from sklearn.neighbors import KDTree
 
 basePath = 'C:/Users/Evan/Documents/GitHub/Zillow/data'
 subPath = 'F:/Nerdy Stuff/Kaggle submissions/Zillow'
@@ -42,10 +41,11 @@ runDetails['MAKE_SUBMISSION'] = True          # Generate output file.
 runDetails['CV_ONLY'] = False                 # Do validation only; do not generate predicitons.
 runDetails['FIT_FULL_TRAIN_SET'] = True       # Fit model to full training set after doing validation.
 runDetails['FIT_2017_TRAIN_SET'] = False      # Use 2017 training data for full fit (no leak correction)
-runDetails['USE_SEASONAL_FEATURES'] = False
-runDetails['VAL_SPLIT_DATE'] = '2016-09-15'   # Cutoff date for validation split
+runDetails['USE_SEASONAL_FEATURES'] = True
+runDetails['VAL_SPLIT_DATE'] = '2017-09-15'   # Cutoff date for validation split
 runDetails['FUDGE_FACTOR_SCALEDOWN'] = 0.3    # exponent to reduce optimized fudge factor for prediction
 runDetails['OPTIMIZE_FUDGE_FACTOR'] = True    # Optimize factor by which to multiply predictions.
+runDetails['qtr4Run'] = True
 
 if runDetails['USE_SEASONAL_FEATURES']:
     basedate = pd.to_datetime('2015-11-15').toordinal()
@@ -75,9 +75,7 @@ def calculate_features(df):
     df['med_lat'] = df.groupby('regionidneighborhood')['latitude'].agg('median')
     df['med_long'] = df.groupby('regionidneighborhood')['longitude'].agg('median')
 
-#    df['zip_std'] = df['regionidzip'].map(zipstd)
-#    df['city_std'] = df['regionidcity'].map(citystd)
-#    df['hood_std'] = df['regionidneighborhood'].map(hoodstd)
+
     
     if runDetails['USE_SEASONAL_FEATURES']:
         df['cos_season'] = ( (pd.to_datetime(df['transactiondate']).apply(lambda x: x.toordinal()-basedate)) * \
@@ -112,30 +110,52 @@ properties2016 = properties2017.drop(taxvars,axis=1).merge(tax2016,
 train2016 = pd.merge(train2016, properties2016, how = 'left', on = 'parcelid')
 train2017 = pd.merge(train2017, properties2017, how = 'left', on = 'parcelid')
 
+# Adding in Q4 validation
+
 train2016 = calculate_features(train2016)
 train2017 =  calculate_features(train2017)
 
 train = pd.concat([train2016, train2017], axis = 0)
 
 # Create separate test data sets for 2016 and 2017
-test2016 = pd.merge(sample_submission[['ParcelId']], properties2016.rename(columns = {'parcelid': 'ParcelId'}), 
-                how = 'left', on = 'ParcelId')
-test2017 = pd.merge(sample_submission[['ParcelId']], properties2017.rename(columns = {'parcelid': 'ParcelId'}), 
-                how = 'left', on = 'ParcelId')
+
+if not runDetails['qtr4Run']:
+
+    test2016 = pd.merge(sample_submission[['ParcelId']], properties2016.rename(columns = {'parcelid': 'ParcelId'}), 
+                    how = 'left', on = 'ParcelId')
+    test2017 = pd.merge(sample_submission[['ParcelId']], properties2017.rename(columns = {'parcelid': 'ParcelId'}), 
+                    how = 'left', on = 'ParcelId')
+
+if runDetails['qtr4Run']:
+    
+    select_qtr4_2017 = pd.to_datetime(train2017["transactiondate"]) >= runDetails['VAL_SPLIT_DATE']
+    
+    if runDetails['USE_SEASONAL_FEATURES']:
+        basedate = pd.to_datetime('2015-11-15').toordinal()
+    
+    train2016['citystd'] = train2016[~select_qtr4_2017].groupby('regionidcity')['logerror'].aggregate("std")
+    train2016['zipstd'] = train2016[~select_qtr4_2017].groupby('regionidzip')['logerror'].aggregate("std")
+    train2016['hoodstd'] = train2016[~select_qtr4_2017].groupby('regionidneighborhood')['logerror'].aggregate("std")
+    
+    train2017['citystd'] = train2017[~select_qtr4_2017].groupby('regionidcity')['logerror'].aggregate("std")
+    train2017['zipstd'] = train2017[~select_qtr4_2017].groupby('regionidzip')['logerror'].aggregate("std")
+    train2017['hoodstd'] = train2017[~select_qtr4_2017].groupby('regionidneighborhood')['logerror'].aggregate("std")
+
+    train2016 = train2016[select_qtr4_2017]
+    train2017 = train2016[select_qtr4_2017]
+    
+    test2016 = calculate_features(train2016)[select_qtr4_2017]
+    test2017 =  calculate_features(train2017)[select_qtr4_2017]
 
 test2016 = calculate_features(test2016)
 test2017 =  calculate_features(test2017)
 
-del properties2016, properties2017, train2016, train2017
 gc.collect();
 
 print('Memory usage reduction...')
 
 train[['latitude', 'longitude']] /= 1e6
 train['censustractandblock'] /= 1e12
-
-test2016 = preptest(test2016)
-test2017 = preptest(test2017)
         
 print('Feature engineering...')
 
